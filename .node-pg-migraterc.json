@@ -1,0 +1,15 @@
+{
+  "database-url-var": "DATABASE_URL",
+  "migrations-dir": "migrations",
+  "migrations-table": "pgmigrations",
+  "migration-file-language": "js",
+  "migration-filename-format": "timestamp",
+  "decamelize": false,
+  "schema": "public",
+  "check-order": true,
+  "verbose": true,
+  "ignore-pattern": "\\..*",
+  "ssl": {
+    "rejectUnauthorized": false
+  }
+}

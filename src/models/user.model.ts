@@ -47,15 +47,16 @@ export interface CreateUserDTO {
   phone?: string;
   date_of_birth?: Date;
   account_id?: string | null;
+  address: string | null
 }
 
 export interface UpdateUserDTO {
-  first_name?: string;
-  last_name?: string;
-  phone?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
   date_of_birth?: Date;
   gender?: string;
-  address?: string;
+  address?: string | null;
   profile_picture?: string;
   timezone?: string;
   language?: string;
@@ -64,7 +65,7 @@ export interface UpdateUserDTO {
   total_classes?: number; 
   total_schools?: number; 
   reset_otp?: string;
-  reset_otp_expires_at?: Date
+  reset_otp_expires_at?: Date;
 }
 
 export class UserModel {
@@ -83,8 +84,8 @@ export class UserModel {
     const result = await dbClient.query(
       `INSERT INTO users (
         username, email, password, first_name, last_name,
-        user_type, phone, date_of_birth, account_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        user_type, phone, date_of_birth, account_id, address
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *`,
       [
         username,
@@ -96,6 +97,7 @@ export class UserModel {
         userData.phone || null,
         userData.date_of_birth || null,
         userData.account_id || null,
+        userData.address || null
       ]
     );
 

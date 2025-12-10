@@ -23,6 +23,48 @@ function validateCreatePayload(body: any): {
   return { valid: true };
 }
 
+function validateGradingCriteria(gradingCriteria: any[], maxScore: number): {
+  valid: boolean;
+  message?: string;
+} {
+  if (!Array.isArray(gradingCriteria) || gradingCriteria.length === 0) {
+    return { valid: true }; // Optional field
+  }
+
+  // Validate each criterion structure
+  for (let i = 0; i < gradingCriteria.length; i++) {
+    const criterion = gradingCriteria[i];
+    if (!criterion.title || typeof criterion.title !== "string") {
+      return {
+        valid: false,
+        message: `Grading criterion at index ${i} must have a title`,
+      };
+    }
+    if (typeof criterion.points !== "number" || criterion.points <= 0) {
+      return {
+        valid: false,
+        message: `Grading criterion at index ${i} must have a valid point value`,
+      };
+    }
+  }
+
+  // Calculate total points from criteria
+  const totalCriteriaPoints = gradingCriteria.reduce(
+    (sum, criterion) => sum + (criterion.points || 0),
+    0
+  );
+
+  // Validate that sum equals max_score
+  if (totalCriteriaPoints !== maxScore) {
+    return {
+      valid: false,
+      message: `Sum of grading criteria points (${totalCriteriaPoints}) must equal max_score (${maxScore})`,
+    };
+  }
+
+  return { valid: true };
+}
+
 export class AssignmentController {
   static async create(req: Request, res: Response): Promise<void> {
     const payload = req.body;
@@ -50,6 +92,23 @@ export class AssignmentController {
     try {
       await client.query("BEGIN");
 
+      const maxScore = payload.max_score ?? 100;
+
+      // Validate grading criteria if provided
+      if (payload.grading_criteria) {
+        const criteriaValidation = validateGradingCriteria(
+          payload.grading_criteria,
+          maxScore
+        );
+        if (!criteriaValidation.valid) {
+          res.status(400).json({
+            success: false,
+            message: criteriaValidation.message,
+          });
+          return;
+        }
+      }
+
       const dto: CreateAssignmentDTO = {
         title: String(payload.title),
         description: payload.description ?? null,
@@ -58,7 +117,7 @@ export class AssignmentController {
         school_id: String(payload.school_id),
         assign_date: payload.assign_date ?? null,
         due_date: payload.due_date ?? null,
-        max_score: payload.max_score ?? 100,
+        max_score: maxScore,
         min_word_count: payload.min_word_count ?? null,
         word_count: payload.word_count ?? null,
         max_word_count: payload.max_word_count ?? null,
@@ -162,6 +221,22 @@ export class AssignmentController {
           .status(404)
           .json({ success: false, message: "Assignment not found" });
         return;
+      }
+
+      // If grading criteria is being updated, validate it
+      if (body.grading_criteria) {
+        const maxScore = body.max_score ?? existing.max_score;
+        const criteriaValidation = validateGradingCriteria(
+          body.grading_criteria,
+          maxScore
+        );
+        if (!criteriaValidation.valid) {
+          res.status(400).json({
+            success: false,
+            message: criteriaValidation.message,
+          });
+          return;
+        }
       }
 
       const updated = await AssignmentModel.update(id as string, body);

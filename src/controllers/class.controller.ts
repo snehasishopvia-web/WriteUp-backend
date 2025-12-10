@@ -3,7 +3,11 @@ import { ClassModel } from "../models/class.model.js";
 import { ClassMemberModel } from "../models/class-member.model.js";
 import { CreateClassDTO, UpdateClassDTO } from "../types/class.types.js";
 import { pool } from "../config/postgres.db.js";
-import { validateTeacherLimit, validateStudentLimit, validateClassLimit } from "../utils/plan-limits.utils.js";
+import {
+  validateTeacherLimit,
+  validateStudentLimit,
+  validateClassLimit,
+} from "../utils/plan-limits.utils.js";
 import { validateSubscriptionBySchoolId } from "../utils/subscription.utils.js";
 
 export class ClassController {
@@ -90,8 +94,9 @@ export class ClassController {
         });
         return;
       }
-
+      console.log("$$$$$$$$$$$$$$$$$$$$$$$$", schoolId);
       const classes = await ClassModel.findBySchoolId(schoolId);
+      console.log("%%%%%%%%%%%%%%%%%%55", classes);
 
       res.status(200).json({
         success: true,
@@ -175,7 +180,10 @@ export class ClassController {
         return;
       }
 
-      const updatedClass = await ClassModel.update(classId as string, updateData);
+      const updatedClass = await ClassModel.update(
+        classId as string,
+        updateData
+      );
 
       if (!updatedClass) {
         res.status(404).json({
@@ -323,7 +331,10 @@ export class ClassController {
         return;
       }
 
-      const removed = await ClassMemberModel.remove(classId as string, userId as string);
+      const removed = await ClassMemberModel.remove(
+        classId as string,
+        userId as string
+      );
 
       if (!removed) {
         res.status(404).json({
@@ -624,11 +635,15 @@ export class ClassController {
         [class_id, role]
       );
 
-      const currentMemberIds = currentMembersResult.rows.map((row) => row.user_id);
+      const currentMemberIds = currentMembersResult.rows.map(
+        (row) => row.user_id
+      );
       const newMemberIds = user_ids;
 
       // Calculate differences
-      const toRemove = currentMemberIds.filter((id) => !newMemberIds.includes(id));
+      const toRemove = currentMemberIds.filter(
+        (id) => !newMemberIds.includes(id)
+      );
       const toAdd = newMemberIds.filter((id) => !currentMemberIds.includes(id));
       const toKeep = currentMemberIds.filter((id) => newMemberIds.includes(id));
 
@@ -712,7 +727,10 @@ export class ClassController {
           [class_id, userId]
         );
 
-        if (existingMembership.rows.length > 0 && existingMembership.rows[0].status !== "active") {
+        if (
+          existingMembership.rows.length > 0 &&
+          existingMembership.rows[0].status !== "active"
+        ) {
           // Reactivate the existing membership
           await client.query(
             `UPDATE class_members
@@ -744,7 +762,8 @@ export class ClassController {
           added_count: addedMembers.length,
           reactivated_count: reactivatedMembers.length,
           removed_count: removedMembers.length,
-          total_members: toKeep.length + addedMembers.length + reactivatedMembers.length,
+          total_members:
+            toKeep.length + addedMembers.length + reactivatedMembers.length,
           kept_members: toKeep,
           added_members: addedMembers,
           reactivated_members: reactivatedMembers,

@@ -15,6 +15,7 @@ import { sendAdminRefundEmail } from "@/utils/sendRefundRequestEmail.js";
 import { sendSlackRefundAlert } from "@/config/sendSlackRefundAlert.js";
 import { StripeCustomerModel } from "@/models/stripe-customer.model.js";
 import { UserModel } from "@/models/user.model.js";
+import { RefundRequestModel } from "@/models/refund-request.model.js";
 
 // Cache for addon product IDs to avoid repeated API calls
 const addonProductCache: { [key: string]: string } = {};
@@ -2483,6 +2484,10 @@ export const upgradePlan = async (req: Request, res: Response) => {
         console.log("Proration calculation (BASE PLAN ONLY) -------", {
           oldBasePlanPrice: oldPlanBasePriceOnly,
           purchaseDate: oldPlanPurchaseDate,
+          purchaseDateISO: oldPlanPurchaseDate.toISOString(),
+          currentDate: now.toISOString(),
+          millisecondsUsed,
+          hoursUsed: (millisecondsUsed / (1000 * 60 * 60)).toFixed(2),
           daysUsed,
           daysRemaining,
           proratedCredit: proratedCredit.toFixed(2),
@@ -2632,3 +2637,4 @@ export const upgradePlan = async (req: Request, res: Response) => {
     return res.status(err.status || 500).json({ error: err.message });
   }
 };
+

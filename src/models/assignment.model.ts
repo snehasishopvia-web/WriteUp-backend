@@ -1,6 +1,12 @@
 import { PoolClient } from "pg";
 import { pool } from "../config/postgres.db.js";
 
+export interface GradingCriterion {
+  title: string;
+  description?: string;
+  points: number;
+}
+
 export interface Assignment {
   id: string;
   title: string;
@@ -19,7 +25,7 @@ export interface Assignment {
   citation_style?: string | null;
   allow_late_submission: boolean;
   status: "active" | "inactive";
-  grading_criteria?: any | null;
+  grading_criteria?: GradingCriterion[] | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -41,7 +47,7 @@ export interface CreateAssignmentDTO {
   citation_style?: string;
   allow_late_submission?: boolean;
   status?: Assignment["status"];
-  grading_criteria?: any;
+  grading_criteria?: GradingCriterion[];
 }
 
 export interface UpdateAssignmentDTO {
@@ -58,7 +64,7 @@ export interface UpdateAssignmentDTO {
   citation_style?: string | null;
   allow_late_submission?: boolean;
   status?: Assignment["status"];
-  grading_criteria?: any | null;
+  grading_criteria?: GradingCriterion[] | null;
   class_id?: string;
   school_id?: string;
 }

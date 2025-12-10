@@ -6,9 +6,18 @@ import {
   getAllAccounts,
   updateAccount,
   deleteAccount,
+  getSubscriptionStatus,
 } from "../controllers/account.controller.js";
 
+
 const router = Router();
+
+/**
+ * @route   GET /api/v1/accounts/subscription-status
+ * @desc    Get account subscription status including expiry info
+ * @access  Public (for now)
+ */
+router.get("/subscription-status", getSubscriptionStatus);
 
 /**
  * @route   POST /api/v1/accounts

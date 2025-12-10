@@ -58,11 +58,9 @@ const corsOptions: CorsOptions = {
     process.env.IS_DEVELOPMENT === "dev"
       ? [
           "http://localhost:3000",
-          "http://localhost:5173",
-          "http://localhost:5174",
-          "http://localhost:5175",
-          "http://192.168.1.5:5173",
-          "http://192.168.1.5:5174",
+          "https://writeup-teacher-portal.netlify.app/",
+          "https://writeup-admin-portal.netlify.app/",
+          "https://writeup-student-portal.netlify.app/",
           adminUrl!,
           teacherUrl!,
           studentUrl!,

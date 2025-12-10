@@ -71,6 +71,7 @@ export const register = asyncHandler(
         user_type: validTypes.includes(req.body.user_type)
           ? req.body.user_type
           : "student",
+        address: null
       };
 
       const user = await UserModel.create(userData, client);
@@ -717,11 +718,12 @@ export const getUserPlanDetails = async (req: Request, res: Response) => {
     const totalTeacher = Number(userData.rows[0].total_teachers);
 
     const accountData = await pool.query(
-      "SELECT plan_id FROM accounts WHERE id = $1",
+      "SELECT plan_id, billing_cycle FROM accounts WHERE id = $1",
       [accountId]
     );
 
     const planId = accountData.rows[0].plan_id;
+    const billingCycle= accountData.rows[0].billing_cycle
 
   
     const planData = await pool.query(
@@ -741,6 +743,7 @@ export const getUserPlanDetails = async (req: Request, res: Response) => {
       total_teacher: totalTeacher,
       extra_teacher: extraTeacher,
       plan_id: planId,
+      billing_cycle: billingCycle
     });
   } catch (err) {
     console.error(err);

@@ -133,7 +133,8 @@ export class ClassJoinLinkController {
       if (!role || (role !== "teacher" && role !== "student")) {
         res.status(400).json({
           success: false,
-          message: "Valid role query parameter is required (teacher or student)",
+          message:
+            "Valid role query parameter is required (teacher or student)",
         });
         return;
       }

@@ -16,6 +16,19 @@ import { applyPlanLimits } from "@/helper/applyPlanLimits.js";
 const router = express.Router();
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
+declare global {
+  namespace Express {
+    interface Request {
+      billingData?: {
+        firstName: string | null;
+        lastName: string | null;
+        phone: string | null;
+        address: string | null;
+      };
+    }
+  }
+}
+
 router.post(
   "/",
   express.raw({ type: "application/json" }),
@@ -50,7 +63,7 @@ router.post(
           const paymentIntent = event.data.object as Stripe.PaymentIntent;
           const paymentIntentId = paymentIntent.id;
 
-          console.log("💰 payment_intent.succeeded received:", {
+          console.log("payment_intent.succeeded received:", {
             id: paymentIntentId,
             amount: paymentIntent.amount,
             customer: paymentIntent.customer,
@@ -83,10 +96,16 @@ router.post(
 
           // Idempotency check - if already processed, skip
           if (payment.status === "succeeded") {
-            console.log("Payment already processed as succeeded, skipping:", paymentIntentId);
+            console.log(
+              "Payment already processed as succeeded, skipping:",
+              paymentIntentId
+            );
             break;
           }
-
+          let firstName: string | null = null;
+          let lastName: string | null = null;
+          let phone: string | null = null;
+          let formattedAddress: string | null = null;
           // Validate payment amount matches expected amount
           const expectedAmount = payment.amount_cents;
           const actualAmount = paymentIntent.amount;
@@ -110,12 +129,14 @@ router.post(
 
           if (paymentIntent.payment_method && paymentIntent.customer) {
             try {
-              const paymentMethodId = typeof paymentIntent.payment_method === 'string' 
-                ? paymentIntent.payment_method 
-                : paymentIntent.payment_method.id;
-              const customerId = typeof paymentIntent.customer === 'string'
-                ? paymentIntent.customer
-                : paymentIntent.customer.id;
+              const paymentMethodId =
+                typeof paymentIntent.payment_method === "string"
+                  ? paymentIntent.payment_method
+                  : paymentIntent.payment_method.id;
+              const customerId =
+                typeof paymentIntent.customer === "string"
+                  ? paymentIntent.customer
+                  : paymentIntent.customer.id;
 
               console.log("Attempting to save payment method for future use:", {
                 paymentMethodId,
@@ -123,8 +144,10 @@ router.post(
               });
 
               // Retrieve the payment method to check if it's already attached
-              const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
-              
+              const paymentMethod = await stripe.paymentMethods.retrieve(
+                paymentMethodId
+              );
+
               console.log("Payment method current state:", {
                 id: paymentMethod.id,
                 customer: paymentMethod.customer,
@@ -144,8 +167,8 @@ router.post(
 
               // Set as default payment method for future invoice payments
               await stripe.customers.update(customerId, {
-                invoice_settings: { 
-                  default_payment_method: paymentMethodId 
+                invoice_settings: {
+                  default_payment_method: paymentMethodId,
                 },
               });
 
@@ -159,16 +182,15 @@ router.post(
                 customer: customerId,
                 type: "card",
               });
-              console.log("🔍 Verification - Payment methods for customer:", {
+              console.log("Verification - Payment methods for customer:", {
                 customerId,
                 count: pmList.data.length,
-                paymentMethods: pmList.data.map(pm => ({
+                paymentMethods: pmList.data.map((pm) => ({
                   id: pm.id,
                   brand: pm.card?.brand,
                   last4: pm.card?.last4,
                 })),
               });
-
             } catch (err: any) {
               console.error("Failed to attach payment method:", {
                 error: err.message,
@@ -192,22 +214,26 @@ router.post(
             "UPDATED PAYMENT::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::",
             updated
           );
-          
+
           if (!updated) {
-            console.warn(`No payment record found for intent: ${paymentIntentId}`);
+            console.warn(
+              `No payment record found for intent: ${paymentIntentId}`
+            );
             // This could be a webhook for a payment created outside our system
             break;
           }
-          
+
           if (!updated.account_id) {
             console.error(`Payment record ${updated.id} has no account_id`);
             break;
           }
-          
+
           const account = await AccountModel.findById(updated.account_id);
 
           if (!account) {
-            console.error(`Account not found for payment: ${updated.id}, account_id: ${updated.account_id}`);
+            console.error(
+              `Account not found for payment: ${updated.id}, account_id: ${updated.account_id}`
+            );
             break;
           }
 
@@ -249,13 +275,54 @@ router.post(
               );
             }
 
+            // Extract firstname, lastname, address, phone number from Stripe ----------
+            if (charge?.billing_details) {
+              const billing = charge.billing_details;
+              const fullName = billing.name || "";
+
+              firstName = fullName.split(" ")[0] || null;
+              lastName = fullName.split(" ").slice(1).join(" ") || null;
+
+              phone = billing.phone || null;
+
+              const addr = (billing.address || {}) as Stripe.Address;
+
+              formattedAddress = Object.entries({
+                line1: addr.line1,
+                line2: addr.line2,
+                city: addr.city,
+                state: addr.state,
+                postal_code: addr.postal_code,
+                country: addr.country,
+              })
+                .filter(([_, value]) => Boolean(value))
+                .map(([key, value]) => `${key}: ${value}`)
+                .join(", ");
+
+              req.billingData = {
+                firstName,
+                lastName,
+                phone,
+                address: formattedAddress || null,
+              };
+
+              console.log(
+                "::::::::::::::::::::::::::::::::::::::::::@@",
+                firstName,
+                lastName,
+                phone,
+                formattedAddress
+              );
+            }
+
             user = await UserModel.create({
-              first_name: "Unknown",
-              last_name: "Unknown",
+              first_name: firstName || "Unknown",
+              last_name: lastName || "Unknown",
               email,
               password,
               user_type,
               account_id: updated.account_id,
+              address: formattedAddress || null,
             });
           }
 
@@ -293,6 +360,9 @@ router.post(
             billing_cycle:
               updated.mode === "subscription" ? "monthly" : "one_time",
             payment_status: "paid",
+            owner_name: `${firstName || "Unknown"} ${lastName || ""}`,
+            phone: phone || null,
+            address: formattedAddress || null,
           });
 
           const extra_students = updated.addons?.students || 0;
@@ -308,27 +378,32 @@ router.post(
           });
 
           // Handle conversion-specific logic
-          const conversionType = updated.metadata?.conversionType || paymentIntent.metadata?.conversionType;
-          const upgradedFromTrial = updated.metadata?.upgradedFromTrial || paymentIntent.metadata?.upgradedFromTrial;
-          
+          const conversionType =
+            updated.metadata?.conversionType ||
+            paymentIntent.metadata?.conversionType;
+          const upgradedFromTrial =
+            updated.metadata?.upgradedFromTrial ||
+            paymentIntent.metadata?.upgradedFromTrial;
+
           if (upgradedFromTrial === "true") {
             console.log("Trial to Paid upgrade completed", {
               accountId: updated.account_id,
               mode: updated.mode,
               amount: updated.amount_cents / 100,
             });
-            
+
             // Account status already set to "active" or "paid" above
             // Trial period ended when subscription was created with trial_end: "now"
           } else if (conversionType === "monthly_to_yearly") {
             console.log("Monthly to Yearly conversion completed", {
               accountId: updated.account_id,
-              cancelledSubscriptionId: updated.metadata?.cancelledSubscriptionId,
+              cancelledSubscriptionId:
+                updated.metadata?.cancelledSubscriptionId,
             });
-            
+
             // Subscription will be cancelled by Stripe automatically at period end
             // Account status already set to "paid" above
-            
+
             // Clear subscription ID from stripe_customers table
             await StripeCustomerModel.updateByAccountId(updated.account_id, {
               stripe_subscription_id: null,
@@ -339,7 +414,7 @@ router.post(
               subscriptionId: updated.stripe_subscription_id,
               yearlyCredit: updated.metadata?.yearlyCredit,
             });
-            
+
             // Subscription already created, account status set to "active" above
             // Yearly credit already applied via Stripe balance or first invoice
           }
@@ -371,12 +446,16 @@ router.post(
           const upgradedFromTrial = subscription.metadata?.upgradedFromTrial;
 
           if (!accountId) {
-            console.error("No accountId in subscription metadata:", subscription.id);
+            console.error(
+              "No accountId in subscription metadata:",
+              subscription.id
+            );
             break;
           }
 
           // Check if this is an upgrade from trial (trial_end: "now" was set)
-          const isTrialUpgrade = upgradedFromTrial === "true" || subscription.trial_end === null;
+          const isTrialUpgrade =
+            upgradedFromTrial === "true" || subscription.trial_end === null;
 
           if (subscription.id) {
             await PaymentModel.updateBySubscriptionId(subscription.id, {
@@ -397,7 +476,7 @@ router.post(
                 accountId,
                 status: subscription.status,
               });
-              
+
               // Don't set to trialing - wait for payment_intent.succeeded to set to active
             } else {
               // New trial subscription
@@ -414,43 +493,44 @@ router.post(
           }
 
           let user = await UserModel.findPrimaryByAccountId(accountId);
-            if (!user) {
-              const account = await AccountModel.findById(accountId);
-              const email =
-                account?.owner_email ?? `user_${Date.now()}@example.com`;
-              const password =
-                account?.password ??
-                (await bcrypt.hash(Math.random().toString(36).slice(-8), 12));
-              user = await UserModel.create({
-                first_name: "Unknown",
-                last_name: "Unknown",
-                email,
-                password,
-                user_type: planSlug === "single-class" ? "teacher" : "admin",
-                account_id: accountId,
-              });
-            }
+          if (!user) {
+            const account = await AccountModel.findById(accountId);
+            const email =
+              account?.owner_email ?? `user_${Date.now()}@example.com`;
+            const password =
+              account?.password ??
+              (await bcrypt.hash(Math.random().toString(36).slice(-8), 12));
+            user = await UserModel.create({
+              first_name: "Unknown",
+              last_name: "Unknown",
+              email,
+              password,
+              user_type: planSlug === "single-class" ? "teacher" : "admin",
+              account_id: accountId,
+              address: null
+            });
+          }
 
-            if (user && accountId) {
-              await StripeCustomerModel.updateByAccountId(accountId, {
-                user_id: user.id,
-              });
-              await PaymentModel.updateUserIdForAccount(accountId, user.id);
-            }
-            let extraTeachers = 0;
-            let extraStudents = 0;
+          if (user && accountId) {
+            await StripeCustomerModel.updateByAccountId(accountId, {
+              user_id: user.id,
+            });
+            await PaymentModel.updateUserIdForAccount(accountId, user.id);
+          }
+          let extraTeachers = 0;
+          let extraStudents = 0;
 
-            if (subscription.metadata?.addons) {
-              const addons = JSON.parse(subscription.metadata.addons);
-              extraTeachers = addons.teachers || 0;
-              extraStudents = addons.students || 0;
-            }
-            if (accountId && planSlug) {
-              await applyPlanLimits(accountId, planSlug, {
-                teachers: extraTeachers,
-                students: extraStudents,
-              });
-            }
+          if (subscription.metadata?.addons) {
+            const addons = JSON.parse(subscription.metadata.addons);
+            extraTeachers = addons.teachers || 0;
+            extraStudents = addons.students || 0;
+          }
+          if (accountId && planSlug) {
+            await applyPlanLimits(accountId, planSlug, {
+              teachers: extraTeachers,
+              students: extraStudents,
+            });
+          }
           break;
         }
 
@@ -464,10 +544,15 @@ router.post(
             | null;
 
           if (paymentIntentId) {
-            const existingPayment = await PaymentModel.findByIntentId(paymentIntentId);
+            const existingPayment = await PaymentModel.findByIntentId(
+              paymentIntentId
+            );
             // Idempotency check
             if (existingPayment && existingPayment.status === "succeeded") {
-              console.log("Payment intent already succeeded, skipping:", paymentIntentId);
+              console.log(
+                "Payment intent already succeeded, skipping:",
+                paymentIntentId
+              );
             } else {
               await PaymentModel.updateStatusByIntentId(paymentIntentId, {
                 status: "succeeded",
@@ -476,25 +561,26 @@ router.post(
               await notifyPaymentSuccess(paymentIntentId);
             }
           }
-          
+
           const acctId = invoice.metadata?.accountId ?? null;
           const planSlug = invoice.metadata?.planSlug ?? null;
-          
+
           if (!subscriptionId) {
             console.warn("No subscription ID in invoice:", invoice.id);
             break;
           }
 
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId as string);
+          const subscription = await stripe.subscriptions.retrieve(
+            subscriptionId as string
+          );
           const defaultPaymentMethod = subscription.default_payment_method as
             | string
             | null;
 
           if (defaultPaymentMethod && acctId) {
-            await StripeCustomerModel.updateByAccountId(
-              acctId,
-              { default_payment_method: defaultPaymentMethod } as any
-            );
+            await StripeCustomerModel.updateByAccountId(acctId, {
+              default_payment_method: defaultPaymentMethod,
+            } as any);
           }
 
           await PaymentModel.updateBySubscriptionId(subscriptionId as string, {
@@ -600,19 +686,24 @@ router.post(
               metadata: {
                 ...sub.metadata,
                 cancel_at_period_end: "true",
-                cancellation_date: new Date((sub as any).current_period_end * 1000).toISOString(),
+                cancellation_date: new Date(
+                  (sub as any).current_period_end * 1000
+                ).toISOString(),
               } as any,
             });
 
             // Note: Don't update account status yet - wait for actual cancellation
-            console.log("Subscription will cancel at:", new Date((sub as any).current_period_end * 1000));
+            console.log(
+              "Subscription will cancel at:",
+              new Date((sub as any).current_period_end * 1000)
+            );
           }
 
           // Handle plan/addon changes (upgrades/downgrades)
           if (sub.items && sub.items.data.length > 0 && accountId) {
             const metadata = sub.metadata || {};
             const planSlug = metadata.newPlanSlug || metadata.planSlug;
-            
+
             if (planSlug) {
               // Extract addon counts from subscription items or metadata
               let extraStudents = 0;
@@ -630,20 +721,26 @@ router.post(
 
               // Update addon counts from subscription items if available
               for (const item of sub.items.data.slice(1)) {
-                const productName = item.price?.product 
-                  ? (typeof item.price.product === 'string' 
-                      ? item.price.product 
-                      : (item.price.product as any)?.name)
-                  : '';
-                const itemMetadata = item.price?.product 
-                  ? (typeof item.price.product !== 'string' 
-                      ? (item.price.product as any)?.metadata 
-                      : null)
+                const productName = item.price?.product
+                  ? typeof item.price.product === "string"
+                    ? item.price.product
+                    : (item.price.product as any)?.name
+                  : "";
+                const itemMetadata = item.price?.product
+                  ? typeof item.price.product !== "string"
+                    ? (item.price.product as any)?.metadata
+                    : null
                   : null;
-                
-                if (itemMetadata?.type === 'student_addon' || productName?.includes('Student')) {
+
+                if (
+                  itemMetadata?.type === "student_addon" ||
+                  productName?.includes("Student")
+                ) {
                   extraStudents = item.quantity || 0;
-                } else if (itemMetadata?.type === 'teacher_addon' || productName?.includes('Teacher')) {
+                } else if (
+                  itemMetadata?.type === "teacher_addon" ||
+                  productName?.includes("Teacher")
+                ) {
                   extraTeachers = item.quantity || 0;
                 }
               }
@@ -678,9 +775,11 @@ router.post(
           if (accountId) {
             // Check if this was a planned cancellation (e.g., monthly→yearly conversion)
             const conversionType = sub.metadata?.conversionType;
-            
+
             if (conversionType === "monthly_to_yearly") {
-              console.log("Subscription cancelled as part of monthly→yearly conversion");
+              console.log(
+                "Subscription cancelled as part of monthly→yearly conversion"
+              );
               // Don't change subscription_status - the yearly payment will have already set it to "paid"
               // Just clear the subscription ID from stripe_customers
               await StripeCustomerModel.updateByAccountId(accountId, {

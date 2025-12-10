@@ -61,6 +61,7 @@ const corsOptions: CorsOptions = {
           "https://writeup-teacher-portal.netlify.app/",
           "https://writeup-admin-portal.netlify.app/",
           "https://writeup-student-portal.netlify.app/",
+          "https://writeup-user-portal.netlify.app/",
           adminUrl!,
           teacherUrl!,
           studentUrl!,

@@ -58,6 +58,8 @@ const corsOptions: CorsOptions = {
     process.env.IS_DEVELOPMENT === "dev"
       ? [
           "http://localhost:3000",
+          "http://localhost:5173",
+          "http://localhost:5174",
           "https://writeup-teacher-portal.netlify.app",
           "https://writeup-admin-portal.netlify.app",
           "https://writeup-student-portal.netlify.app",
@@ -72,24 +74,6 @@ const corsOptions: CorsOptions = {
   credentials: true, // Required for cookies
   maxAge: 86400, // 24 hours
 };
-
-console.log(
-  `${
-    process.env.IS_DEVELOPMENT === "dev"
-      ? [
-          "http://localhost:3000",
-          "https://writeup-teacher-portal.netlify.app",
-          "https://writeup-admin-portal.netlify.app",
-          "https://writeup-student-portal.netlify.app",
-          "https://writeup-user-portal.netlify.app",
-          adminUrl!,
-          teacherUrl!,
-          studentUrl!,
-          userUrl!,
-        ]
-      : process.env.CORS_ORIGIN?.split(",") || ""
-  }`
-);
 
 app.use(helmet());
 app.use(cors(corsOptions));

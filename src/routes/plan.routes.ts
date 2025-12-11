@@ -46,13 +46,18 @@ router.get("/:id", getPlanById);
  * @desc    Update a plan
  * @access  Private (Admin only)
  */
-router.put("/:id",authenticate, roleAuthorization([ROLES.ADMIN]), updatePlan);
+router.put("/:id", authenticate, roleAuthorization([ROLES.ADMIN]), updatePlan);
 
 /**
  * @route   DELETE /api/v1/plans/:id
  * @desc    Soft delete a plan
  * @access  Private (Admin only)
  */
-router.delete("/:id",authenticate, roleAuthorization([ROLES.ADMIN]), deletePlan);
+router.delete(
+  "/:id",
+  authenticate,
+  roleAuthorization([ROLES.ADMIN]),
+  deletePlan
+);
 
 export default router;
